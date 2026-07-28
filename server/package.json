@@ -9,8 +9,11 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun --watch src/index.ts",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
     "test": "bun test --timeout 60000",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify": "bun run typecheck && bun run test"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "12.0.4",

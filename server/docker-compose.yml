@@ -1,0 +1,27 @@
+# The local development database. Nothing else uses this file: the tests start their own
+# throwaway Postgres, and the deployed service is given a connection string by the platform.
+#
+# The credentials below are local-only development values that match `.env.example`. They are
+# not secrets, and the deployed database must never reuse them.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: food_guide
+      POSTGRES_PASSWORD: food_guide
+      POSTGRES_DB: food_guide
+    # Not 5432, so this cannot collide with a Postgres already installed on the machine.
+    ports:
+      - "55432:5432"
+    healthcheck:
+      # Over TCP, not the Unix socket: during initdb a temporary server accepts socket
+      # connections while the real one is not up yet, and reports ready too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U food_guide -d food_guide"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - db:/var/lib/postgresql/data
+
+volumes:
+  db:

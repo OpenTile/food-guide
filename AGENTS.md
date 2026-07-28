@@ -5,15 +5,26 @@ Guidance for AI agents working in this repo. This is the canonical instructions 
 ## The server
 
 TypeScript on Bun in `server/`. Requires **Bun 1.3 or newer** — on earlier versions the test
-container never finishes starting.
+container never finishes starting. Run these from `server/`:
 
 ```sh
-cd server
 bun install
-bun test           # Seam A, against a real Postgres
-bun run typecheck
-bun run dev        # needs DATABASE_URL — copy .env.example to .env
+bun run verify     # typecheck + full suite; run before committing
+bun test test/health.test.ts
+
+bun run db:up      # local Postgres on :55432, waits until it accepts connections
+cp .env.example .env
+bun run dev        # http://localhost:3000
+bun run db:down    # data survives in a volume
 ```
+
+The tests start and dispose of their own Postgres, so only `bun run dev` needs `db:up`. Use it
+rather than an ad-hoc `docker run`: `pg_isready` reports ready during initdb, while only a
+temporary server is up, and the service then dies at boot with `ERR_POSTGRES_CONNECTION_CLOSED`.
+
+The credentials in `docker-compose.yml` and `.env.example` are local-only development values.
+The deployed database and bearer token exist solely as platform configuration — this repository
+is public and neither may ever be committed.
 
 ### Container runtime for the tests
 
