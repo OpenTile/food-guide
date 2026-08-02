@@ -20,5 +20,6 @@ export type CreateEntryResult = {
 export interface EntryStore {
   /** Stores an Entry, succeeding idempotently when its identifier already exists. */
   create(entry: Entry): Promise<CreateEntryResult>;
+  /** Returns Entries with Eaten At in `[from, to)`, ordered by Eaten At then identifier ascending. */
   list(range: EntryRange): Promise<Entry[]>;
 }
