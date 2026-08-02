@@ -22,4 +22,6 @@ export interface EntryStore {
   create(entry: Entry): Promise<CreateEntryResult>;
   /** Returns Entries with Eaten At in `[from, to)`, ordered by Eaten At then identifier ascending. */
   list(range: EntryRange): Promise<Entry[]>;
+  /** Permanently removes an Entry, succeeding when its identifier does not exist. */
+  delete(id: string): Promise<void>;
 }

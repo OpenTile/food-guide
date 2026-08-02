@@ -51,4 +51,8 @@ export class PostgresEntryStore implements EntryStore {
     `;
     return rows.map(entryFromRow);
   }
+
+  async delete(id: string): Promise<void> {
+    await this.sql`delete from entries where id = ${id}`;
+  }
 }
