@@ -1,6 +1,3 @@
-// © 2026 Andrei Chenchik. All rights reserved.
-// Unauthorized using, copying, distribution, or modification prohibited.
-
 import ComposableArchitecture
 import SwiftUI
 
@@ -43,7 +40,7 @@ struct AppView: View {
 
             SecureField(
                 "Bearer token",
-                text: $store.token.sending(\.tokenChanged)
+                text: $store.tokenInput.sending(\.tokenInputChanged)
             )
             .autocorrectionDisabled()
             .textContentType(.password)

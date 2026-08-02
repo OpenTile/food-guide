@@ -1,9 +1,22 @@
-// © 2026 Andrei Chenchik. All rights reserved.
-// Unauthorized using, copying, distribution, or modification prohibited.
-
 import ComposableArchitecture
+import CustomDump
 import Testing
 @testable import FoodGuide
+
+struct BearerTokenTests {
+    @Test
+    func normalizesWhitespace() {
+        expectNoDifference(
+            BearerToken(" test-token\n"),
+            BearerToken("test-token")
+        )
+    }
+
+    @Test
+    func rejectsBlankValue() {
+        expectNoDifference(BearerToken(" \n"), nil)
+    }
+}
 
 @MainActor
 struct AppFeatureTests {
@@ -44,11 +57,12 @@ struct AppFeatureTests {
     }
 
     @Test
-    func subsequentLaunchWithStoredTokenShowsMainScreen() async {
+    func subsequentLaunchWithStoredTokenShowsMainScreen() async throws {
+        let token = try #require(BearerToken("test-token"))
         let store = TestStore(initialState: AppFeature.State()) {
             AppFeature()
         } withDependencies: {
-            $0[TokenStorageClient.self].load = { "test-token" }
+            $0[TokenStorageClient.self].load = { token }
         }
 
         await store.send(.task)
@@ -65,31 +79,32 @@ struct AppFeatureTests {
             AppFeature()
         }
 
-        await store.send(.tokenChanged(" \n")) {
-            $0.token = " \n"
+        await store.send(.tokenInputChanged(" \n")) {
+            $0.tokenInput = " \n"
         }
         await store.send(.continueButtonTapped)
     }
 
     @Test
-    func suppliedTokenIsStoredBeforeShowingMainScreen() async {
+    func suppliedTokenIsStoredBeforeShowingMainScreen() async throws {
+        let expectedToken = try #require(BearerToken("test-token"))
         var state = AppFeature.State()
         state.screen = .onboarding
         let store = TestStore(initialState: state) {
             AppFeature()
         } withDependencies: {
             $0[TokenStorageClient.self].save = { token in
-                guard token == "test-token" else { throw TestFailure.unexpectedToken }
+                guard token == expectedToken else { throw TestFailure.unexpectedToken }
             }
         }
 
-        await store.send(.tokenChanged(" test-token\n")) {
-            $0.token = " test-token\n"
+        await store.send(.tokenInputChanged(" test-token\n")) {
+            $0.tokenInput = " test-token\n"
         }
         await store.send(.continueButtonTapped)
         await store.receive(\.tokenSaved) {
             $0.screen = .main
-            $0.token = ""
+            $0.tokenInput = ""
         }
     }
 
@@ -97,7 +112,7 @@ struct AppFeatureTests {
     func storageFailureKeepsTokenOnOnboardingScreen() async {
         var state = AppFeature.State()
         state.screen = .onboarding
-        state.token = "test-token"
+        state.tokenInput = "test-token"
         let store = TestStore(initialState: state) {
             AppFeature()
         } withDependencies: {

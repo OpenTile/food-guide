@@ -1,6 +1,3 @@
-// © 2026 Andrei Chenchik. All rights reserved.
-// Unauthorized using, copying, distribution, or modification prohibited.
-
 import ComposableArchitecture
 import Foundation
 import Security
@@ -8,8 +5,8 @@ import Security
 /// Loads and saves the bearer token used to unlock the food log.
 @DependencyClient
 nonisolated struct TokenStorageClient {
-    var load: @Sendable () throws -> String?
-    var save: @Sendable (_ token: String) throws -> Void
+    var load: @Sendable () throws -> BearerToken?
+    var save: @Sendable (_ token: BearerToken) throws -> Void
 }
 
 extension TokenStorageClient: DependencyKey {
@@ -24,7 +21,7 @@ extension TokenStorageClient: DependencyKey {
 private nonisolated enum KeychainTokenStore {
     private static let account = "bearer-token"
 
-    static func load() throws -> String? {
+    static func load() throws -> BearerToken? {
         var query = baseQuery
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         query[kSecReturnData as String] = true
@@ -39,21 +36,21 @@ private nonisolated enum KeychainTokenStore {
         case errSecSuccess:
             guard
                 let data = item as? Data,
-                let token = String(data: data, encoding: .utf8)
+                let rawValue = String(data: data, encoding: .utf8)
             else {
                 throw KeychainError(status: errSecDecode)
             }
-            return token
+            return BearerToken(rawValue)
 
         default:
             throw KeychainError(status: status)
         }
     }
 
-    static func save(_ token: String) throws {
+    static func save(_ token: BearerToken) throws {
         let attributes: [String: Any] = [
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            kSecValueData as String: Data(token.utf8),
+            kSecValueData as String: Data(token.rawValue.utf8),
         ]
         let updateStatus = SecItemUpdate(
             baseQuery as CFDictionary,

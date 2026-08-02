@@ -1,8 +1,4 @@
-// © 2026 Andrei Chenchik. All rights reserved.
-// Unauthorized using, copying, distribution, or modification prohibited.
-
 import ComposableArchitecture
-import Foundation
 
 @Reducer
 struct AppFeature {
@@ -16,14 +12,14 @@ struct AppFeature {
 
         var errorMessage: String?
         var screen = Screen.launching
-        var token = ""
+        var tokenInput = ""
 
         var canContinue: Bool {
-            !normalizedToken.isEmpty
+            bearerToken != nil
         }
 
-        var normalizedToken: String {
-            token.trimmingCharacters(in: .whitespacesAndNewlines)
+        var bearerToken: BearerToken? {
+            BearerToken(tokenInput)
         }
     }
 
@@ -32,7 +28,7 @@ struct AppFeature {
         case storedTokenFound
         case storedTokenMissing
         case task
-        case tokenChanged(String)
+        case tokenInputChanged(String)
         case tokenLoadFailed
         case tokenSaveFailed
         case tokenSaved
@@ -44,8 +40,7 @@ struct AppFeature {
         Reduce { state, action in
             switch action {
             case .continueButtonTapped:
-                guard state.canContinue else { return .none }
-                let token = state.normalizedToken
+                guard let token = state.bearerToken else { return .none }
                 return .run { [tokenStorage] send in
                     do {
                         try tokenStorage.save(token)
@@ -79,9 +74,9 @@ struct AppFeature {
                     }
                 }
 
-            case .tokenChanged(let token):
+            case .tokenInputChanged(let token):
                 state.errorMessage = nil
-                state.token = token
+                state.tokenInput = token
                 return .none
 
             case .tokenLoadFailed:
@@ -96,7 +91,7 @@ struct AppFeature {
             case .tokenSaved:
                 state.errorMessage = nil
                 state.screen = .main
-                state.token = ""
+                state.tokenInput = ""
                 return .none
             }
         }

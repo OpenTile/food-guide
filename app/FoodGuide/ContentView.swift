@@ -1,6 +1,3 @@
-// © 2026 Andrei Chenchik. All rights reserved.
-// Unauthorized using, copying, distribution, or modification prohibited.
-
 import SwiftUI
 
 struct ContentView: View {
