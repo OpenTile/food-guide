@@ -44,6 +44,12 @@ function listEntries(from: string, to: string): Promise<Response> {
   return Promise.resolve(server.fetch(authenticatedRequest(`/entries?${query}`)));
 }
 
+function deleteEntry(id: string): Promise<Response> {
+  return Promise.resolve(
+    server.fetch(authenticatedRequest(`/entries/${id}`, { method: "DELETE" })),
+  );
+}
+
 test("an Entry can be read back in a range containing its Eaten At", async () => {
   const entry = {
     id: "e8e45d48-fbbd-48ba-82f7-57b283ba6f12",
@@ -93,6 +99,47 @@ test("creating the same Entry identifier twice succeeds and stores one Entry", a
     firstStatus: 201,
     secondStatus: 200,
     listed: [entry],
+  });
+});
+
+test("a deleted Entry no longer appears in a range that contained it", async () => {
+  const entry = {
+    id: "79455e39-18f8-4dc3-a20e-688c1c7b14d8",
+    text: "apple and peanut butter",
+    eatenAt: "2026-08-02T15:30:00.000Z",
+  };
+
+  await createEntry(entry);
+  const deleteResponse = await deleteEntry(entry.id);
+  const listResponse = await listEntries(
+    "2026-08-02T15:00:00.000Z",
+    "2026-08-02T16:00:00.000Z",
+  );
+
+  expect({
+    deleteStatus: deleteResponse.status,
+    listed: await listResponse.json(),
+  }).toEqual({
+    deleteStatus: 204,
+    listed: [],
+  });
+});
+
+test("deleting a malformed Entry identifier is rejected as a client error", async () => {
+  const response = await deleteEntry("not-an-entry-identifier");
+
+  expect({ status: response.status, body: await response.json() }).toEqual({
+    status: 400,
+    body: { error: "invalid_entry_identifier" },
+  });
+});
+
+test("deleting an Entry identifier that does not exist succeeds", async () => {
+  const response = await deleteEntry("272e4f0a-f6aa-42b4-ac84-911c4c67df87");
+
+  expect({ status: response.status, body: await response.text() }).toEqual({
+    status: 204,
+    body: "",
   });
 });
 

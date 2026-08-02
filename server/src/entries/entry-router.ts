@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import type { Entry, EntryStore } from "./entry-store.ts";
 
 const MAX_ENTRY_TEXT_LENGTH = 10_000;
+const ENTRY_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const INSTANT_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/i;
 
@@ -61,7 +63,7 @@ function entryFromBody(body: unknown): Entry | undefined {
   const { id, text, eatenAt } = body as Record<string, unknown>;
   if (
     typeof id !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ||
+    !ENTRY_ID_PATTERN.test(id) ||
     typeof text !== "string" ||
     text.trim().length === 0 ||
     Array.from(text).length > MAX_ENTRY_TEXT_LENGTH
@@ -75,7 +77,7 @@ function entryFromBody(body: unknown): Entry | undefined {
   return { id, text, eatenAt: instant };
 }
 
-/** Builds the authenticated HTTP routes for creating and listing Entries. */
+/** Builds the authenticated HTTP routes for creating, listing, and deleting Entries. */
 export function createEntryRouter(entryStore: EntryStore): Hono {
   const router = new Hono();
 
@@ -94,6 +96,16 @@ export function createEntryRouter(entryStore: EntryStore): Hono {
 
     const entries = await entryStore.list({ from, to });
     return c.json(entries.map(entryJson));
+  });
+
+  router.delete("/:id", async (c) => {
+    const id = c.req.param("id");
+    if (!ENTRY_ID_PATTERN.test(id)) {
+      return c.json({ error: "invalid_entry_identifier" }, 400);
+    }
+
+    await entryStore.delete(id);
+    return c.body(null, 204);
   });
 
   return router;

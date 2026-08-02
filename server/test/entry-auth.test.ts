@@ -20,6 +20,9 @@ test("missing, malformed, and incorrect bearer tokens are rejected identically",
     new Request("http://server/entries", {
       headers: { authorization: "Bearer incorrect" },
     }),
+    new Request("http://server/entries/272e4f0a-f6aa-42b4-ac84-911c4c67df87", {
+      method: "DELETE",
+    }),
   ];
 
   const responses = await Promise.all(requests.map((request) => server.fetch(request)));
@@ -32,6 +35,11 @@ test("missing, malformed, and incorrect bearer tokens are rejected identically",
   );
 
   expect(results).toEqual([
+    {
+      status: 401,
+      contentType: "application/json",
+      body: '{"error":"unauthorized"}',
+    },
     {
       status: 401,
       contentType: "application/json",
