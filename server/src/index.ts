@@ -2,6 +2,7 @@ import { SQL } from "bun";
 import { createApp } from "./app.ts";
 import { loadConfig } from "./config.ts";
 import { migrate } from "./db/migrator.ts";
+import { PostgresEntryStore } from "./db/postgres-entry-store.ts";
 
 const config = loadConfig();
 const sql = new SQL(config.databaseUrl);
@@ -15,5 +16,8 @@ console.log(
 
 export default {
   port: config.port,
-  fetch: createApp().fetch,
+  fetch: createApp({
+    bearerToken: config.bearerToken,
+    entryStore: new PostgresEntryStore(sql),
+  }).fetch,
 };

@@ -6,6 +6,9 @@ import {
 } from "@testcontainers/postgresql";
 import { createApp } from "../src/app.ts";
 import { migrate } from "../src/db/migrator.ts";
+import { PostgresEntryStore } from "../src/db/postgres-entry-store.ts";
+
+export const TEST_BEARER_TOKEN = "entry-api-token";
 
 /**
  * Seam A: the server's HTTP boundary.
@@ -49,7 +52,10 @@ export async function startTestServer(): Promise<TestServer> {
   await migrate(sql);
 
   return {
-    fetch: createApp().fetch,
+    fetch: createApp({
+      bearerToken: TEST_BEARER_TOKEN,
+      entryStore: new PostgresEntryStore(sql),
+    }).fetch,
     close: () => sql.close(),
   };
 }
