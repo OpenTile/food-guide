@@ -7,7 +7,7 @@ to trust months later.
 
 An iOS app and its backend, in one repository.
 
-**Status: design settled, nothing built yet.** The work is tracked in the issues.
+**Status: the backend skeleton exists; the app does not.** The work is tracked in the issues.
 
 ## Where the thinking lives
 
