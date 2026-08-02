@@ -8,6 +8,7 @@ import Testing
 @MainActor
 struct AppFeatureTests {
     enum TestFailure: Error {
+        case storageFailure
         case unexpectedToken
     }
 
@@ -31,7 +32,7 @@ struct AppFeatureTests {
             AppFeature()
         } withDependencies: {
             $0[TokenStorageClient.self].load = {
-                throw TestFailure.unexpectedToken
+                throw TestFailure.storageFailure
             }
         }
 
@@ -101,7 +102,7 @@ struct AppFeatureTests {
             AppFeature()
         } withDependencies: {
             $0[TokenStorageClient.self].save = { _ in
-                throw TestFailure.unexpectedToken
+                throw TestFailure.storageFailure
             }
         }
 

@@ -19,7 +19,11 @@ struct AppFeature {
         var token = ""
 
         var canContinue: Bool {
-            !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            !normalizedToken.isEmpty
+        }
+
+        var normalizedToken: String {
+            token.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 
@@ -41,7 +45,7 @@ struct AppFeature {
             switch action {
             case .continueButtonTapped:
                 guard state.canContinue else { return .none }
-                let token = state.token.trimmingCharacters(in: .whitespacesAndNewlines)
+                let token = state.normalizedToken
                 return .run { [tokenStorage] send in
                     do {
                         try tokenStorage.save(token)
