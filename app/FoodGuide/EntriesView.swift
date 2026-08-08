@@ -3,13 +3,17 @@ import SwiftUI
 
 struct EntriesView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @FocusState private var isDraftFocused: Bool
 
-    let store: StoreOf<EntriesFeature>
+    @Bindable var store: StoreOf<EntriesFeature>
 
     var body: some View {
         NavigationStack {
             List {
                 content
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                composeBar
             }
             .navigationTitle("Food Guide")
             .refreshable {
@@ -21,8 +25,48 @@ struct EntriesView: View {
             store.send(.appDidBecomeActive)
         }
         .task {
+            isDraftFocused = true
             await store.send(.task).finish()
         }
+    }
+
+    private var composeBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if case .failed(let error) = store.saveState {
+                Label(error.description, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField(
+                    "What did you eat?",
+                    text: $store.draft.text.sending(\.draftChanged),
+                    axis: .vertical
+                )
+                .focused($isDraftFocused)
+                .lineLimit(1...4)
+                .onSubmit {
+                    store.send(.sendButtonTapped)
+                }
+                .submitLabel(.send)
+                .textFieldStyle(.roundedBorder)
+
+                Button {
+                    store.send(.sendButtonTapped)
+                } label: {
+                    if store.saveState == .saving {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.up.circle.fill")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!store.canSend)
+            }
+        }
+        .padding()
+        .background(.bar)
     }
 
     @ViewBuilder
