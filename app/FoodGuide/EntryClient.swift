@@ -1,7 +1,7 @@
 import ComposableArchitecture
 import Foundation
 
-/// Retrieves Entries from the backend using the saved bearer token.
+/// Retrieves Entries within a supplied Day Window using a supplied bearer token.
 @DependencyClient
 nonisolated struct EntryClient {
     var list: @Sendable (_ dayWindow: DayWindow, _ bearerToken: BearerToken) async throws -> [Entry]
