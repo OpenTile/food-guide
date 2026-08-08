@@ -60,8 +60,8 @@ private nonisolated enum LiveEntryClient {
         }
     }
 
-    private static func instantString(_ date: Date) -> String {
-        makeInstantFormatter().string(from: date)
+    private static func instantString(_ instant: Date) -> String {
+        makeInstantFormatter().string(from: instant)
     }
 
     private static func makeInstantFormatter() -> ISO8601DateFormatter {

@@ -1,6 +1,6 @@
 import Foundation
 
-/// A single eating occasion returned by the backend.
+/// A free-text record of one Eating Occasion.
 nonisolated struct Entry: Equatable, Identifiable, Sendable {
     let id: UUID
     let text: String
