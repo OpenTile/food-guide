@@ -5,10 +5,15 @@ import Foundation
 struct EntriesFeature {
     @ObservableState
     struct State: Equatable {
+        enum LoadState: Equatable {
+            case failed(String)
+            case initial
+            case loaded
+            case loading
+        }
+
         var entries: [Entry] = []
-        var hasLoaded = false
-        var isLoading = false
-        var loadErrorMessage: String?
+        var loadState = LoadState.initial
     }
 
     enum Action {
@@ -31,21 +36,16 @@ struct EntriesFeature {
         Reduce { state, action in
             switch action {
             case .entriesResponse(.failure):
-                state.hasLoaded = true
-                state.isLoading = false
-                state.loadErrorMessage = "Couldn’t load your Entries. Try again."
+                state.loadState = .failed("Couldn’t load your Entries. Try again.")
                 return .none
 
             case .entriesResponse(.success(let entries)):
                 state.entries = entries
-                state.hasLoaded = true
-                state.isLoading = false
-                state.loadErrorMessage = nil
+                state.loadState = .loaded
                 return .none
 
             case .appDidBecomeActive, .refreshRequested, .task:
-                state.isLoading = true
-                state.loadErrorMessage = nil
+                state.loadState = .loading
                 let dayWindow = DayWindow(containing: now, calendar: calendar)
                 return .run { [entryClient, tokenStorage] send in
                     await send(

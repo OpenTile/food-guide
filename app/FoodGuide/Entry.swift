@@ -12,9 +12,9 @@ nonisolated struct DayWindow: Equatable, Sendable {
     let from: Date
     let to: Date
 
-    /// Creates the Day Window containing `date` in `calendar`'s timezone.
-    init(containing date: Date, calendar: Calendar) {
-        let from = calendar.startOfDay(for: date)
+    /// Creates the Day Window containing `instant` in `calendar`'s timezone.
+    init(containing instant: Date, calendar: Calendar) {
+        let from = calendar.startOfDay(for: instant)
         guard let to = calendar.date(byAdding: .day, value: 1, to: from) else {
             preconditionFailure("Calendar could not advance the Day Window")
         }

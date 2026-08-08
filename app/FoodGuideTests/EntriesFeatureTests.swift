@@ -57,12 +57,11 @@ struct EntriesFeatureTests {
         }
 
         await store.send(.task) {
-            $0.isLoading = true
+            $0.loadState = .loading
         }
         await store.receive(\.entriesResponse.success) {
             $0.entries = entries
-            $0.hasLoaded = true
-            $0.isLoading = false
+            $0.loadState = .loaded
         }
     }
 
@@ -81,12 +80,10 @@ struct EntriesFeatureTests {
         }
 
         await store.send(.task) {
-            $0.isLoading = true
+            $0.loadState = .loading
         }
         await store.receive(\.entriesResponse.failure) {
-            $0.hasLoaded = true
-            $0.isLoading = false
-            $0.loadErrorMessage = "Couldn’t load your Entries. Try again."
+            $0.loadState = .failed("Couldn’t load your Entries. Try again.")
         }
     }
 
@@ -116,20 +113,19 @@ struct EntriesFeatureTests {
         }
 
         await store.send(.task) {
-            $0.isLoading = true
+            $0.loadState = .loading
         }
         await store.receive(\.entriesResponse.success) {
             $0.entries = [breakfast]
-            $0.hasLoaded = true
-            $0.isLoading = false
+            $0.loadState = .loaded
         }
 
         await store.send(.appDidBecomeActive) {
-            $0.isLoading = true
+            $0.loadState = .loading
         }
         await store.receive(\.entriesResponse.success) {
             $0.entries = [breakfast, lunch]
-            $0.isLoading = false
+            $0.loadState = .loaded
         }
     }
 }

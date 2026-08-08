@@ -27,7 +27,7 @@ struct EntriesView: View {
 
     @ViewBuilder
     private var content: some View {
-        if !store.hasLoaded, store.isLoading {
+        if store.loadState == .loading, store.entries.isEmpty {
             HStack {
                 Spacer()
                 ProgressView("Loading Entries…")
@@ -35,7 +35,7 @@ struct EntriesView: View {
             }
             .listRowSeparator(.hidden)
         } else if store.entries.isEmpty {
-            if let errorMessage = store.loadErrorMessage {
+            if case .failed(let errorMessage) = store.loadState {
                 ContentUnavailableView(
                     "Couldn’t Load Entries",
                     systemImage: "wifi.exclamationmark",
@@ -49,7 +49,7 @@ struct EntriesView: View {
                 )
             }
         } else {
-            if let errorMessage = store.loadErrorMessage {
+            if case .failed(let errorMessage) = store.loadState {
                 Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
             }
