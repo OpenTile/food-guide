@@ -1,15 +1,19 @@
 import ComposableArchitecture
 import Foundation
 
-/// Retrieves Entries within a supplied Day Window using a supplied bearer token.
+/// Commits Draft submissions and retrieves Entries using a supplied bearer token.
 @DependencyClient
 nonisolated struct EntryClient {
+    var create: @Sendable (_ submission: DraftSubmission, _ bearerToken: BearerToken) async throws -> Entry
     var list: @Sendable (_ dayWindow: DayWindow, _ bearerToken: BearerToken) async throws -> [Entry]
 }
 
 extension EntryClient: DependencyKey {
     static var liveValue: Self {
-        Self(list: LiveEntryClient.list)
+        Self(
+            create: LiveEntryClient.create,
+            list: LiveEntryClient.list
+        )
     }
 }
 
@@ -17,6 +21,27 @@ private nonisolated enum LiveEntryClient {
     enum ClientError: Error {
         case invalidResponse
         case invalidURL
+    }
+
+    static func create(
+        submission: DraftSubmission,
+        bearerToken: BearerToken
+    ) async throws -> Entry {
+        let url = AppConfiguration.backendBaseURL.appendingPathComponent("entries")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(
+            EntryRequest(
+                id: submission.id,
+                text: submission.text,
+                eatenAt: instantString(submission.eatenAt)
+            )
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let data = try await authenticatedData(for: request, bearerToken: bearerToken)
+
+        return try decodeEntry(JSONDecoder().decode(EntryResponse.self, from: data))
     }
 
     static func list(
@@ -37,7 +62,18 @@ private nonisolated enum LiveEntryClient {
             throw ClientError.invalidURL
         }
 
-        var request = URLRequest(url: url)
+        let request = URLRequest(url: url)
+        let data = try await authenticatedData(for: request, bearerToken: bearerToken)
+
+        let entries = try JSONDecoder().decode([EntryResponse].self, from: data)
+        return try entries.map(decodeEntry)
+    }
+
+    private static func authenticatedData(
+        for request: URLRequest,
+        bearerToken: BearerToken
+    ) async throws -> Data {
+        var request = request
         request.setValue(
             "Bearer \(bearerToken.rawValue)",
             forHTTPHeaderField: "Authorization"
@@ -49,15 +85,14 @@ private nonisolated enum LiveEntryClient {
         else {
             throw ClientError.invalidResponse
         }
+        return data
+    }
 
-        let entries = try JSONDecoder().decode([EntryResponse].self, from: data)
-        let formatter = makeInstantFormatter()
-        return try entries.map { entry in
-            guard let eatenAt = formatter.date(from: entry.eatenAt) else {
-                throw ClientError.invalidResponse
-            }
-            return Entry(id: entry.id, text: entry.text, eatenAt: eatenAt)
+    private static func decodeEntry(_ response: EntryResponse) throws -> Entry {
+        guard let eatenAt = makeInstantFormatter().date(from: response.eatenAt) else {
+            throw ClientError.invalidResponse
         }
+        return Entry(id: response.id, text: response.text, eatenAt: eatenAt)
     }
 
     private static func instantString(_ instant: Date) -> String {
@@ -71,6 +106,12 @@ private nonisolated enum LiveEntryClient {
     }
 
     private struct EntryResponse: Decodable {
+        let id: UUID
+        let text: String
+        let eatenAt: String
+    }
+
+    private struct EntryRequest: Encodable {
         let id: UUID
         let text: String
         let eatenAt: String

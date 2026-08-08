@@ -6,6 +6,57 @@ import Testing
 
 @MainActor
 struct EntriesFeatureTests {
+    private struct DraftFixture {
+        let acceptedEntry: Entry
+        let submission: DraftSubmission
+        let token: BearerToken
+
+        init(
+            id: String = "8E1ADDFC-9E9A-4BAF-9A1F-9A7922E3421D",
+            text: String = "two eggs, toast, black coffee"
+        ) throws {
+            let id = try #require(UUID(uuidString: id))
+            let eatenAt = Date(timeIntervalSince1970: 1_786_173_300)
+            self.acceptedEntry = Entry(id: id, text: text, eatenAt: eatenAt)
+            self.submission = DraftSubmission(id: id, text: text, eatenAt: eatenAt)
+            self.token = try #require(BearerToken("test-token"))
+        }
+    }
+
+    private actor EntryCreateGate {
+        private var isOpen = false
+        private var continuation: CheckedContinuation<Void, Never>?
+
+        func open() {
+            isOpen = true
+            continuation?.resume()
+            continuation = nil
+        }
+
+        func wait() async {
+            guard !isOpen else { return }
+            await withCheckedContinuation { continuation = $0 }
+        }
+    }
+
+    private actor FailOnceEntryCreator {
+        var attempts: [DraftSubmission] = []
+
+        func create(_ submission: DraftSubmission) throws -> Entry {
+            attempts.append(submission)
+            guard attempts.count > 1 else { throw TestFailure.saveFailed }
+            return Entry(
+                id: submission.id,
+                text: submission.text,
+                eatenAt: submission.eatenAt
+            )
+        }
+
+        func recordedAttempts() -> [DraftSubmission] {
+            attempts
+        }
+    }
+
     private actor EntryResponses {
         var values: [[Entry]]
 
@@ -20,6 +71,362 @@ struct EntriesFeatureTests {
 
     enum TestFailure: Error {
         case loadFailed
+        case saveFailed
+    }
+
+    private func makeStore(
+        initialState: EntriesFeature.State? = nil,
+        fixture: DraftFixture,
+        uuid: UUIDGenerator? = nil,
+        create: @escaping @Sendable (DraftSubmission, BearerToken) async throws -> Entry
+    ) -> TestStoreOf<EntriesFeature> {
+        TestStore(initialState: initialState ?? EntriesFeature.State()) {
+            EntriesFeature()
+        } withDependencies: {
+            $0.date.now = fixture.submission.eatenAt
+            $0.uuid = uuid ?? .constant(fixture.submission.id)
+            $0[EntryClient.self].create = create
+            $0[TokenStorageClient.self].load = { fixture.token }
+        }
+    }
+
+    @Test
+    func sendingDraftAppendsAcceptedEntryAndClearsDraft() async throws {
+        let fixture = try DraftFixture()
+        let store = makeStore(fixture: fixture) { submission, bearerToken in
+            expectNoDifference(submission, fixture.submission)
+            expectNoDifference(bearerToken, fixture.token)
+            return fixture.acceptedEntry
+        }
+
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = fixture.submission
+            $0.saveState = .saving
+        }
+        await store.receive(\.entryResponse.success) {
+            $0.draft.text = ""
+            $0.draft.submission = nil
+            $0.entries = [fixture.acceptedEntry]
+            $0.saveState = .idle
+        }
+    }
+
+    @Test
+    func acceptedEntryRemainsWhenEarlierLoadCompletes() async throws {
+        let fixture = try DraftFixture()
+        var initialState = EntriesFeature.State()
+        initialState.loadState = .loading
+        let store = makeStore(initialState: initialState, fixture: fixture) { _, _ in
+            fixture.acceptedEntry
+        }
+
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = fixture.submission
+            $0.saveState = .saving
+        }
+        await store.receive(\.entryResponse.success) {
+            $0.draft.text = ""
+            $0.draft.submission = nil
+            $0.entries = [fixture.acceptedEntry]
+            $0.entryIDsAcceptedWhileLoading = [fixture.acceptedEntry.id]
+            $0.saveState = .idle
+        }
+        await store.send(.entriesResponse(.success([]))) {
+            $0.entryIDsAcceptedWhileLoading = []
+            $0.loadState = .loaded
+        }
+    }
+
+    @Test
+    func acceptedEntryDoesNotClearANewerDraft() async throws {
+        let fixture = try DraftFixture()
+        let newerText = "lentil soup"
+        let gate = EntryCreateGate()
+        let store = makeStore(fixture: fixture) { _, _ in
+            await gate.wait()
+            return fixture.acceptedEntry
+        }
+
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = fixture.submission
+            $0.saveState = .saving
+        }
+        await store.send(.draftChanged(newerText)) {
+            $0.draft.hasChangedSinceSubmission = true
+            $0.draft.text = newerText
+        }
+        await gate.open()
+        await store.receive(\.entryResponse.success) {
+            $0.draft.hasChangedSinceSubmission = false
+            $0.draft.submission = nil
+            $0.entries = [fixture.acceptedEntry]
+            $0.saveState = .idle
+        }
+    }
+
+    @Test
+    func acceptedEntryDoesNotClearANewerDraftWithTheSameText() async throws {
+        let fixture = try DraftFixture()
+        let gate = EntryCreateGate()
+        let store = makeStore(fixture: fixture) { _, _ in
+            await gate.wait()
+            return fixture.acceptedEntry
+        }
+
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = fixture.submission
+            $0.saveState = .saving
+        }
+        await store.send(.draftChanged("lentil soup")) {
+            $0.draft.hasChangedSinceSubmission = true
+            $0.draft.text = "lentil soup"
+        }
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+        await gate.open()
+        await store.receive(\.entryResponse.success) {
+            $0.draft.hasChangedSinceSubmission = false
+            $0.draft.submission = nil
+            $0.entries = [fixture.acceptedEntry]
+            $0.saveState = .idle
+        }
+    }
+
+    @Test
+    func acceptedEntryDoesNotClearAByteDistinctDraft() async throws {
+        let submittedText = "caf\u{00E9}"
+        let newerText = "cafe\u{0301}"
+        let fixture = try DraftFixture(text: submittedText)
+        let gate = EntryCreateGate()
+        let store = makeStore(fixture: fixture) { _, _ in
+            await gate.wait()
+            return fixture.acceptedEntry
+        }
+
+        await store.send(.draftChanged(submittedText)) {
+            $0.draft.text = submittedText
+        }
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = fixture.submission
+            $0.saveState = .saving
+        }
+        await store.send(.draftChanged(newerText)) {
+            $0.draft.hasChangedSinceSubmission = true
+            $0.draft.text = newerText
+        }
+        await gate.open()
+        await store.receive(\.entryResponse.success) {
+            $0.draft.hasChangedSinceSubmission = false
+            $0.draft.submission = nil
+            $0.entries = [fixture.acceptedEntry]
+            $0.saveState = .idle
+        }
+    }
+
+    @Test
+    func failedSavePreservesDraftAndSurfacesError() async throws {
+        let fixture = try DraftFixture()
+        let store = makeStore(fixture: fixture) { _, _ in
+            throw TestFailure.saveFailed
+        }
+
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = fixture.submission
+            $0.saveState = .saving
+        }
+        await store.receive(\.entryResponse.failure) {
+            $0.saveState = .failed(.requestFailed)
+        }
+    }
+
+    @Test
+    func retryAfterFailureReusesEntryIdentifier() async throws {
+        let fixture = try DraftFixture(id: "00000000-0000-0000-0000-000000000000")
+        let creates = FailOnceEntryCreator()
+        let store = makeStore(fixture: fixture, uuid: .incrementing) { submission, _ in
+            try await creates.create(submission)
+        }
+
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = fixture.submission
+            $0.saveState = .saving
+        }
+        await store.receive(\.entryResponse.failure) {
+            $0.saveState = .failed(.requestFailed)
+        }
+
+        await store.send(.entriesResponse(.success([fixture.acceptedEntry]))) {
+            $0.entries = [fixture.acceptedEntry]
+            $0.loadState = .loaded
+        }
+
+        await store.send(.sendButtonTapped) {
+            $0.saveState = .saving
+        }
+        await store.receive(\.entryResponse.success) {
+            $0.draft.text = ""
+            $0.draft.submission = nil
+            $0.entries = [fixture.acceptedEntry]
+            $0.saveState = .idle
+        }
+        let attempts = await creates.recordedAttempts()
+        expectNoDifference(attempts, [fixture.submission, fixture.submission])
+    }
+
+    @Test
+    func retryAfterFailureWhenDraftReturnsToSubmittedTextClearsDraftAndReusesIdentifier() async throws {
+        let fixture = try DraftFixture(id: "00000000-0000-0000-0000-000000000000")
+        let creates = FailOnceEntryCreator()
+        let gate = EntryCreateGate()
+        let store = makeStore(fixture: fixture, uuid: .incrementing) { submission, _ in
+            await gate.wait()
+            return try await creates.create(submission)
+        }
+
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = fixture.submission
+            $0.saveState = .saving
+        }
+        await store.send(.draftChanged("lentil soup")) {
+            $0.draft.hasChangedSinceSubmission = true
+            $0.draft.text = "lentil soup"
+        }
+        await gate.open()
+        await store.receive(\.entryResponse.failure) {
+            $0.saveState = .failed(.requestFailed)
+        }
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+            $0.saveState = .idle
+        }
+
+        await store.send(.sendButtonTapped) {
+            $0.draft.hasChangedSinceSubmission = false
+            $0.saveState = .saving
+        }
+        await store.receive(\.entryResponse.success) {
+            $0.draft.text = ""
+            $0.draft.submission = nil
+            $0.entries = [fixture.acceptedEntry]
+            $0.saveState = .idle
+        }
+        let attempts = await creates.recordedAttempts()
+        expectNoDifference(attempts, [fixture.submission, fixture.submission])
+    }
+
+    @Test
+    func clearingDraftAfterFailureEndsItsRetryLifecycle() async throws {
+        let fixture = try DraftFixture(id: "00000000-0000-0000-0000-000000000000")
+        let creates = FailOnceEntryCreator()
+        let gate = EntryCreateGate()
+        let store = makeStore(fixture: fixture, uuid: .incrementing) { submission, _ in
+            await gate.wait()
+            return try await creates.create(submission)
+        }
+
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = fixture.submission
+            $0.saveState = .saving
+        }
+        await store.send(.draftChanged("lentil soup")) {
+            $0.draft.hasChangedSinceSubmission = true
+            $0.draft.text = "lentil soup"
+        }
+        await gate.open()
+        await store.receive(\.entryResponse.failure) {
+            $0.saveState = .failed(.requestFailed)
+        }
+        await store.send(.draftChanged("")) {
+            $0.draft.hasChangedSinceSubmission = false
+            $0.draft.submission = nil
+            $0.draft.text = ""
+            $0.saveState = .idle
+        }
+        await store.send(.draftChanged(fixture.submission.text)) {
+            $0.draft.text = fixture.submission.text
+        }
+
+        let newSubmission = DraftSubmission(
+            id: try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001")),
+            text: fixture.submission.text,
+            eatenAt: fixture.submission.eatenAt
+        )
+        await store.send(.sendButtonTapped) {
+            $0.draft.submission = newSubmission
+            $0.saveState = .saving
+        }
+        await store.receive(\.entryResponse.success) {
+            $0.draft.text = ""
+            $0.draft.submission = nil
+            $0.entries = [
+                Entry(
+                    id: newSubmission.id,
+                    text: newSubmission.text,
+                    eatenAt: newSubmission.eatenAt
+                )
+            ]
+            $0.saveState = .idle
+        }
+        let attempts = await creates.recordedAttempts()
+        expectNoDifference(attempts, [fixture.submission, newSubmission])
+    }
+
+    @Test
+    func whitespaceOnlyDraftCannotBeSent() async {
+        let store = TestStore(initialState: EntriesFeature.State()) {
+            EntriesFeature()
+        }
+
+        await store.send(.draftChanged(" \n\t")) {
+            $0.draft.text = " \n\t"
+        }
+        await store.send(.sendButtonTapped)
+    }
+
+    @Test
+    func zeroWidthNoBreakSpaceDraftCannotBeSent() async {
+        let store = TestStore(initialState: EntriesFeature.State()) {
+            EntriesFeature()
+        }
+
+        await store.send(.draftChanged("\u{FEFF}")) {
+            $0.draft.text = "\u{FEFF}"
+        }
+        await store.send(.sendButtonTapped)
+    }
+
+    @Test
+    func emptyDraftCannotBeSent() async {
+        let store = TestStore(initialState: EntriesFeature.State()) {
+            EntriesFeature()
+        }
+
+        await store.send(.sendButtonTapped)
     }
 
     @Test
