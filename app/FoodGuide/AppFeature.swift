@@ -10,6 +10,7 @@ struct AppFeature {
             case onboarding
         }
 
+        var entries = EntriesFeature.State()
         var errorMessage: String?
         var screen = Screen.launching
         var tokenInput = ""
@@ -25,6 +26,7 @@ struct AppFeature {
 
     enum Action {
         case continueButtonTapped
+        case entries(EntriesFeature.Action)
         case storedTokenFound
         case storedTokenMissing
         case task
@@ -49,6 +51,9 @@ struct AppFeature {
                         await send(.tokenSaveFailed)
                     }
                 }
+
+            case .entries:
+                return .none
 
             case .storedTokenFound:
                 state.errorMessage = nil
@@ -94,6 +99,9 @@ struct AppFeature {
                 state.tokenInput = ""
                 return .none
             }
+        }
+        Scope(state: \.entries, action: \.entries) {
+            EntriesFeature()
         }
     }
 }

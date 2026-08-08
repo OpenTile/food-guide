@@ -11,7 +11,9 @@ struct AppView: View {
                 ProgressView()
 
             case .main:
-                ContentView()
+                EntriesView(
+                    store: store.scope(state: \.entries, action: \.entries)
+                )
 
             case .onboarding:
                 onboarding
