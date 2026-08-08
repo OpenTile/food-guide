@@ -18,9 +18,12 @@ struct EntriesFeature {
             case saving
         }
 
+        var deleteError: DeleteError?
+        var deletingEntryID: Entry.ID?
         var draft = Draft()
         var entries: [Entry] = []
         var entryIDsAcceptedWhileLoading: Set<Entry.ID> = []
+        var entryIDsDeletedWhileLoading: Set<Entry.ID> = []
         var loadState = LoadState.initial
         var saveState = SaveState.idle
 
@@ -31,12 +34,25 @@ struct EntriesFeature {
 
     enum Action {
         case appDidBecomeActive
+        case deleteButtonTapped(Entry.ID)
+        case deleteResponse(Result<Entry.ID, DeleteError>)
         case draftChanged(String)
         case entryResponse(Result<Entry, SaveError>)
         case entriesResponse(Result<[Entry], LoadError>)
         case refreshRequested
         case sendButtonTapped
         case task
+    }
+
+    enum DeleteError: Error, Equatable {
+        case requestFailed
+
+        var description: String {
+            switch self {
+            case .requestFailed:
+                "Couldn’t delete your Entry. Try again."
+            }
+        }
     }
 
     enum LoadError: Error, Equatable {
@@ -63,6 +79,41 @@ struct EntriesFeature {
     var body: some Reducer<State, Action> {
         Reduce { state, action in
             switch action {
+            case .deleteButtonTapped(let entryID):
+                guard
+                    state.deletingEntryID == nil,
+                    state.entries.contains(where: { $0.id == entryID })
+                else { return .none }
+                state.deleteError = nil
+                state.deletingEntryID = entryID
+                return .run { [entryClient, tokenStorage] send in
+                    await send(
+                        .deleteResponse(
+                            await Result {
+                                guard let token = try tokenStorage.load() else {
+                                    throw DeleteError.requestFailed
+                                }
+                                try await entryClient.delete(entryID, token)
+                                return entryID
+                            }
+                            .mapError { _ in DeleteError.requestFailed }
+                        )
+                    )
+                }
+
+            case .deleteResponse(.failure(let error)):
+                state.deleteError = error
+                state.deletingEntryID = nil
+                return .none
+
+            case .deleteResponse(.success(let entryID)):
+                state.deletingEntryID = nil
+                state.entries.removeAll { $0.id == entryID }
+                if state.loadState == .loading {
+                    state.entryIDsDeletedWhileLoading.insert(entryID)
+                }
+                return .none
+
             case .draftChanged(let draft):
                 state.draft.updateText(draft)
                 if case .failed = state.saveState {
@@ -90,6 +141,7 @@ struct EntriesFeature {
 
             case .entriesResponse(.failure):
                 state.entryIDsAcceptedWhileLoading = []
+                state.entryIDsDeletedWhileLoading = []
                 state.loadState = .failed("Couldn’t load your Entries. Try again.")
                 return .none
 
@@ -97,17 +149,21 @@ struct EntriesFeature {
                 let acceptedEntries = state.entries.filter {
                     state.entryIDsAcceptedWhileLoading.contains($0.id)
                 }
-                state.entries = entries
+                state.entries = entries.filter {
+                    !state.entryIDsDeletedWhileLoading.contains($0.id)
+                }
                 for entry in acceptedEntries where !state.entries.contains(where: { $0.id == entry.id }) {
                     state.entries.append(entry)
                 }
                 state.entries.sort { $0.eatenAt < $1.eatenAt }
                 state.entryIDsAcceptedWhileLoading = []
+                state.entryIDsDeletedWhileLoading = []
                 state.loadState = .loaded
                 return .none
 
             case .appDidBecomeActive, .refreshRequested, .task:
                 state.entryIDsAcceptedWhileLoading = []
+                state.entryIDsDeletedWhileLoading = []
                 state.loadState = .loading
                 let dayWindow = DayWindow(containing: now, calendar: calendar)
                 return .run { [entryClient, tokenStorage] send in

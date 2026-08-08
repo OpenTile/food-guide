@@ -70,6 +70,7 @@ struct EntriesFeatureTests {
     }
 
     enum TestFailure: Error {
+        case deleteFailed
         case loadFailed
         case saveFailed
     }
@@ -252,6 +253,80 @@ struct EntriesFeatureTests {
         }
         await store.receive(\.entryResponse.failure) {
             $0.saveState = .failed(.requestFailed)
+        }
+    }
+
+    @Test
+    func deletingEntryRemovesItFromTheList() async throws {
+        let fixture = try DraftFixture()
+        var initialState = EntriesFeature.State()
+        initialState.entries = [fixture.acceptedEntry]
+        let store = TestStore(initialState: initialState) {
+            EntriesFeature()
+        } withDependencies: {
+            $0[EntryClient.self].delete = { entryID, bearerToken in
+                expectNoDifference(entryID, fixture.acceptedEntry.id)
+                expectNoDifference(bearerToken, fixture.token)
+            }
+            $0[TokenStorageClient.self].load = { fixture.token }
+        }
+
+        await store.send(.deleteButtonTapped(fixture.acceptedEntry.id)) {
+            $0.deletingEntryID = fixture.acceptedEntry.id
+        }
+        await store.receive(\.deleteResponse.success) {
+            $0.deletingEntryID = nil
+            $0.entries = []
+        }
+    }
+
+    @Test
+    func deletedEntryDoesNotReturnWhenEarlierLoadCompletes() async throws {
+        let fixture = try DraftFixture()
+        var initialState = EntriesFeature.State()
+        initialState.entries = [fixture.acceptedEntry]
+        initialState.loadState = .loading
+        let store = TestStore(initialState: initialState) {
+            EntriesFeature()
+        } withDependencies: {
+            $0[EntryClient.self].delete = { _, _ in }
+            $0[TokenStorageClient.self].load = { fixture.token }
+        }
+
+        await store.send(.deleteButtonTapped(fixture.acceptedEntry.id)) {
+            $0.deletingEntryID = fixture.acceptedEntry.id
+        }
+        await store.receive(\.deleteResponse.success) {
+            $0.deletingEntryID = nil
+            $0.entries = []
+            $0.entryIDsDeletedWhileLoading = [fixture.acceptedEntry.id]
+        }
+        await store.send(.entriesResponse(.success([fixture.acceptedEntry]))) {
+            $0.entryIDsDeletedWhileLoading = []
+            $0.loadState = .loaded
+        }
+    }
+
+    @Test
+    func failedDeleteLeavesEntryAndSurfacesError() async throws {
+        let fixture = try DraftFixture()
+        var initialState = EntriesFeature.State()
+        initialState.entries = [fixture.acceptedEntry]
+        let store = TestStore(initialState: initialState) {
+            EntriesFeature()
+        } withDependencies: {
+            $0[EntryClient.self].delete = { _, _ in
+                throw TestFailure.deleteFailed
+            }
+            $0[TokenStorageClient.self].load = { fixture.token }
+        }
+
+        await store.send(.deleteButtonTapped(fixture.acceptedEntry.id)) {
+            $0.deletingEntryID = fixture.acceptedEntry.id
+        }
+        await store.receive(\.deleteResponse.failure) {
+            $0.deleteError = .requestFailed
+            $0.deletingEntryID = nil
         }
     }
 
