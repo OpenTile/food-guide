@@ -98,6 +98,11 @@ struct EntriesView: View {
                     .foregroundStyle(.red)
             }
 
+            if let deleteError = store.deleteError {
+                Label(deleteError.description, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+            }
+
             ForEach(store.entries) { entry in
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text(entry.eatenAt, style: .time)
@@ -105,6 +110,14 @@ struct EntriesView: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                     Text(entry.text)
+                }
+                .swipeActions {
+                    Button(role: .destructive) {
+                        store.send(.deleteButtonTapped(entry.id))
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled(store.deletingEntryID != nil)
                 }
             }
         }

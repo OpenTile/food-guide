@@ -1,10 +1,11 @@
 import ComposableArchitecture
 import Foundation
 
-/// Commits Draft submissions and retrieves Entries using a supplied bearer token.
+/// Creates, deletes, and retrieves Entries using a supplied bearer token.
 @DependencyClient
 nonisolated struct EntryClient {
     var create: @Sendable (_ submission: DraftSubmission, _ bearerToken: BearerToken) async throws -> Entry
+    var delete: @Sendable (_ entryID: Entry.ID, _ bearerToken: BearerToken) async throws -> Void
     var list: @Sendable (_ dayWindow: DayWindow, _ bearerToken: BearerToken) async throws -> [Entry]
 }
 
@@ -12,6 +13,7 @@ extension EntryClient: DependencyKey {
     static var liveValue: Self {
         Self(
             create: LiveEntryClient.create,
+            delete: LiveEntryClient.delete,
             list: LiveEntryClient.list
         )
     }
@@ -42,6 +44,19 @@ private nonisolated enum LiveEntryClient {
         let data = try await authenticatedData(for: request, bearerToken: bearerToken)
 
         return try decodeEntry(JSONDecoder().decode(EntryResponse.self, from: data))
+    }
+
+    static func delete(
+        entryID: Entry.ID,
+        bearerToken: BearerToken
+    ) async throws {
+        let url = AppConfiguration.backendBaseURL
+            .appendingPathComponent("entries")
+            .appendingPathComponent(entryID.uuidString)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+
+        _ = try await authenticatedData(for: request, bearerToken: bearerToken)
     }
 
     static func list(
