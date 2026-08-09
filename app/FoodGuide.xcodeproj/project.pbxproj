@@ -330,7 +330,7 @@
 		755A8D80301FC32900A6581A /* Debug configuration for PBXNativeTarget "FoodGuide" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				API_BASE_URL = "http://localhost:3000";
+				API_BASE_URL = "https://food-guide-staging.up.railway.app";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
