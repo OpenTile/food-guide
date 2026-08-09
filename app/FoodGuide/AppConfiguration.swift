@@ -6,7 +6,7 @@ nonisolated enum AppConfiguration {
         guard
             let fileURL = Bundle.main.url(forResource: "Config", withExtension: "plist"),
             let data = try? Data(contentsOf: fileURL),
-            let values = try? PropertyListDecoder().decode(Values.self, from: data)
+            let values = try? PropertyListDecoder().decode(BackendConfiguration.self, from: data)
         else {
             preconditionFailure(
                 "Config.plist is missing or invalid; copy Config.example.plist and configure it"
@@ -25,7 +25,7 @@ nonisolated enum AppConfiguration {
         return url
     }()
 
-    private struct Values: Decodable {
+    private struct BackendConfiguration: Decodable {
         let productionBackendBaseURL: String
         let stagingBackendBaseURL: String
 
