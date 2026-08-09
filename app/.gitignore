@@ -1,2 +1,5 @@
 xcuserdata/
 *.xcuserstate
+
+# Local backend configuration
+/FoodGuide/Config.plist

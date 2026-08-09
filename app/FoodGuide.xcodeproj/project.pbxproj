@@ -29,6 +29,7 @@
 		F00000013020000000000001 /* Exceptions for "FoodGuide" folder in "FoodGuide" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Config.example.plist,
 				Info.plist,
 			);
 			target = 755A8D5F301FC32800A6581A /* FoodGuide */;
@@ -330,7 +331,6 @@
 		755A8D80301FC32900A6581A /* Debug configuration for PBXNativeTarget "FoodGuide" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				API_BASE_URL = "http://localhost:3000";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -359,7 +359,6 @@
 		755A8D81301FC32900A6581A /* Release configuration for PBXNativeTarget "FoodGuide" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				API_BASE_URL = "https://food-guide.opentile.io";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
